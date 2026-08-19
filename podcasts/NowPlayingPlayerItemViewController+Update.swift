@@ -45,7 +45,7 @@ extension NowPlayingPlayerItemViewController {
     }
 
     @objc func update(notification: NSNotification?) {
-        guard let playingEpisode = PlaybackManager.shared.currentEpisode() else { return }
+        guard let playingEpisode = PlaybackManager.shared.currentEpisode else { return }
 
         if PlaybackManager.shared.shouldRenderVideo() {
             if floatingVideoView.isHidden {
@@ -59,6 +59,10 @@ extension NowPlayingPlayerItemViewController {
             floatingVideoView.isHidden = true
             episodeImage.alpha = 1.0
             episodeImage.layer.opacity = 1
+            // The player-open zoom transition (PlayerZoomAnimator) leaves the artwork subview at
+            // alpha 0 when the player opens with video showing, since the video covers it. Restore it
+            // here so the cover art reappears once video is turned off.
+            artworkImageView.alpha = 1
             if wasShowingVideo {
                 // The artwork slot was invisible while the video was showing, so its aspect-fit
                 // subview may not have been laid out yet. Force a pass so the artwork (reloaded at
@@ -73,7 +77,7 @@ extension NowPlayingPlayerItemViewController {
         let skipFwdAmount = Settings.skipForwardTime
         skipFwdBtn.skipAmount = skipFwdAmount
 
-        updatePlayPauseButton(isPlaying: PlaybackManager.shared.playing())
+        updatePlayPauseButton(isPlaying: PlaybackManager.shared.isPlaying)
         updateUpTo(upTo: PlaybackManager.shared.currentTime(), duration: PlaybackManager.shared.duration(), moveSlider: true)
         reloadShelfActions()
         updateChaptersControls()
@@ -125,7 +129,7 @@ extension NowPlayingPlayerItemViewController {
     }
 
     private func updateChapterInfoWithChapters(_ chapters: Chapters) {
-        guard let playingEpisode = PlaybackManager.shared.currentEpisode() else { return }
+        guard let playingEpisode = PlaybackManager.shared.currentEpisode else { return }
         if let visibleChapter = chapters.visibleChapter, PlaybackManager.shared.chapterCount() != 0 {
             episodeInfoView.isHidden = true
             chapterInfoView.isHidden = false
@@ -191,7 +195,7 @@ extension NowPlayingPlayerItemViewController {
             timeSlider.currentTime = upTo
         }
 
-        timeSlider.indeterminant = PlaybackManager.shared.buffering() && PlaybackManager.shared.playing()
+        timeSlider.indeterminant = PlaybackManager.shared.isBuffering && PlaybackManager.shared.isPlaying
     }
 
     var isErrorVisible: Bool {
@@ -203,7 +207,7 @@ extension NowPlayingPlayerItemViewController {
             hideError()
             return
         }
-        guard PlaybackManager.shared.currentEpisode() != nil,
+        guard PlaybackManager.shared.currentEpisode != nil,
               let error = PlaybackManager.shared.activeError else {
             hideError()
             return
@@ -262,7 +266,7 @@ extension NowPlayingPlayerItemViewController {
     }
 
     func updateProvisionalChapterInfoForTime(time: TimeInterval) {
-        guard let playingEpisode = PlaybackManager.shared.currentEpisode() else { return }
+        guard let playingEpisode = PlaybackManager.shared.currentEpisode else { return }
 
         if PlaybackManager.shared.chapterCount() == 0 {
             return
@@ -294,7 +298,7 @@ extension NowPlayingPlayerItemViewController {
     // MARK: - Progress
 
     @objc func progressUpdated() {
-        if timeSlider.isScrubbing() || PlaybackManager.shared.isSeeking() { return }
+        if timeSlider.isScrubbing() || PlaybackManager.shared.isSeeking { return }
 
         updateUpTo(upTo: PlaybackManager.shared.currentTime(), duration: PlaybackManager.shared.duration(), moveSlider: true)
 

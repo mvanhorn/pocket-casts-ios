@@ -2,6 +2,7 @@ import Combine
 import PocketCastsDataModel
 import SwiftUI
 
+@MainActor
 class BookmarkEpisodeListController: ThemedHostingController<BookmarkEpisodeListView> {
     private let playbackManager: PlaybackManager
     private let bookmarkManager: BookmarkManager
@@ -40,6 +41,9 @@ class BookmarkEpisodeListController: ThemedHostingController<BookmarkEpisodeList
 // MARK: - BookmarkListRouter
 
 extension BookmarkEpisodeListController: BookmarkListRouter {
+    /// The list is shown within the episode's own details, so its artwork doesn't open them again
+    var opensBookmarkEpisode: Bool { false }
+
     func bookmarkPlay(_ bookmark: Bookmark) async throws {
         try await playbackManager.playBookmark(bookmark, source: viewModel.analyticsSource)
     }
@@ -47,9 +51,9 @@ extension BookmarkEpisodeListController: BookmarkListRouter {
     func bookmarkEdit(_ bookmark: Bookmark) {
         let controller = BookmarkEditTitleViewController(manager: bookmarkManager,
                                                          bookmark: bookmark,
-                                                         state: .updating)
-
-        controller.source = viewModel.analyticsSource
+                                                         state: .updating,
+                                                         style: .themed,
+                                                         source: viewModel.analyticsSource)
 
         present(controller, animated: true)
     }

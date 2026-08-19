@@ -29,6 +29,7 @@ enum AnalyticsSource: String, AnalyticsDescribable {
     case folder
     case incomingShareList = "incoming_share_list"
     case listeningHistory = "listening_history"
+    case liveActivity = "live_activity"
     case mediaType = "media_type"
     case miniplayer
     case noFiles = "no_files"
@@ -78,7 +79,7 @@ class AnalyticsCoordinator {
         // in the episode's MIME type and is only detected once frames render — so assume video rather
         // than mislabel it as audio. `willPlayViaHLS` is gated behind the HLS flag and only true when the
         // current source is actually HLS, so this only affects analytics for real HLS playback.
-        if let episode = PlaybackManager.shared.currentEpisode(), EpisodeManager.willPlayViaHLS(episode) {
+        if let episode = PlaybackManager.shared.currentEpisode, EpisodeManager.willPlayViaHLS(episode) {
             return true
         }
         return PlaybackManager.shared.isCurrentEpisodeVideo()

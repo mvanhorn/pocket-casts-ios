@@ -196,6 +196,15 @@ class TranscriptViewController: PlayerItemViewController, AnalyticsSourceProvide
     }
 
     private func setupViews() {
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self, UITraitHorizontalSizeClass.self]) { (controller: TranscriptViewController, previousTraitCollection: UITraitCollection) in
+            if controller.traitCollection.preferredContentSizeCategory != previousTraitCollection.preferredContentSizeCategory {
+                controller.refreshText()
+                controller.refreshError()
+                controller.refreshActionButtons()
+            }
+            controller.updateTextMargins()
+        }
+
         view.addSubview(transcriptView)
         let transcriptViewTopConstraint = transcriptView.topAnchor.constraint(equalTo: view.topAnchor)
         self.transcriptViewTopConstraint = transcriptViewTopConstraint
@@ -277,13 +286,11 @@ class TranscriptViewController: PlayerItemViewController, AnalyticsSourceProvide
         stackView.addArrangedSubview(closeButton)
         stackView.addArrangedSubview(UIView())
 
-        if FeatureFlag.shareTranscripts.enabled {
-            stackView.addArrangedSubview(shareButton)
-        }
+        shareButton.isHidden = !FeatureFlag.shareTranscripts.enabled
+        stackView.addArrangedSubview(shareButton)
 
-        if showFromEpisode {
-            stackView.addArrangedSubview(playButton)
-        }
+        playButton.isHidden = !showFromEpisode
+        stackView.addArrangedSubview(playButton)
 
         stackView.addArrangedSubview(searchButton)
 
@@ -536,13 +543,15 @@ class TranscriptViewController: PlayerItemViewController, AnalyticsSourceProvide
         loadTranscript()
         addObservers()
         transcriptView.delegate = self
-        #if DEBUG
+#if DEBUG
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            self?.debugOverlay?.update()
+            MainActor.assumeIsolated {
+                self?.debugOverlay?.update()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         debugTimer = timer
-        #endif
+#endif
     }
 
     override func willBeRemovedFromPlayer() {
@@ -551,10 +560,10 @@ class TranscriptViewController: PlayerItemViewController, AnalyticsSourceProvide
         if FeatureFlag.syncedTranscripts.enabled {
             FingerprintTimingManager.shared.stop()
         }
-        #if DEBUG
+#if DEBUG
         debugTimer?.invalidate()
         debugTimer = nil
-        #endif
+#endif
     }
 
     private func stopSyncedTranscripts() {
@@ -602,16 +611,33 @@ class TranscriptViewController: PlayerItemViewController, AnalyticsSourceProvide
 
     private func setupLoadingState() {
         transcriptView.isHidden = true
-        searchButton.isHidden = true
+        restoreControlButtonsLayout()
+        setControlButtonsVisible(false)
         errorView.isHidden = true
         activityIndicatorView.startAnimating()
     }
 
     private func setupShowTranscriptState() {
         transcriptView.isHidden = false
-        searchButton.isHidden = false
+        setControlButtonsVisible(true)
         errorView.isHidden = true
         activityIndicatorView.stopAnimating()
+    }
+
+    private func setControlButtonsVisible(_ visible: Bool) {
+        let buttons: [UIButton] = [searchButton, shareButton, playButton]
+        buttons.forEach { setControlButton($0, visible: visible) }
+    }
+
+    private func setControlButton(_ button: UIButton, visible: Bool) {
+        guard !button.isHidden else { return }
+        button.alpha = visible ? 1 : 0
+        button.isUserInteractionEnabled = visible
+    }
+
+    private func restoreControlButtonsLayout() {
+        shareButton.isHidden = !FeatureFlag.shareTranscripts.enabled
+        searchButton.isHidden = false
     }
 
     private var currentEpisodeUUID: String?
@@ -640,7 +666,8 @@ class TranscriptViewController: PlayerItemViewController, AnalyticsSourceProvide
                 await MainActor.run {
                     self.setHasGeneratedTranscripts(hasGeneratedTranscripts)
                     if isDisplayingGenerated {
-                        if FeatureFlag.syncedTranscripts.enabled, !self.showFromEpisode || PlaybackManager.shared.isNowPlayingEpisode(episodeUuid: self.playbackManager.episodeUUID) {
+                        let isCurrentEpisode = PlaybackManager.shared.isCurrentEpisode(uuid: episodeUUID)
+                        if FeatureFlag.syncedTranscripts.enabled, !self.showFromEpisode || isCurrentEpisode {
                             FingerprintTimingManager.shared.prepareForCurrentEpisode()
                         }
                         self.startHighlightDisplayLink()
@@ -706,15 +733,6 @@ class TranscriptViewController: PlayerItemViewController, AnalyticsSourceProvide
 
     private func resetKmp() {
         kmpSearch = nil
-    }
-
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        if traitCollection.preferredContentSizeCategory != previousTraitCollection?.preferredContentSizeCategory {
-            refreshText()
-            refreshError()
-            refreshActionButtons()
-        }
-        updateTextMargins()
     }
 
     private func refreshActionButtons() {
@@ -839,6 +857,10 @@ class TranscriptViewController: PlayerItemViewController, AnalyticsSourceProvide
 
     private func show(error: Error) {
         activityIndicatorView.stopAnimating()
+        // Collapse the transcript-only controls so the play button sits at the trailing edge.
+        shareButton.isHidden = true
+        searchButton.isHidden = true
+        setControlButton(playButton, visible: true)
         var message = L10n.transcriptErrorFailedToLoad
         if let transcriptError = error as? TranscriptError {
             message = transcriptError.localizedDescription
